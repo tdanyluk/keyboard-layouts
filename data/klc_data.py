@@ -1,4 +1,6 @@
-win_to_mac_keycodes = {
+import copy
+
+win_to_mac_keycodes_us = {
     1: 53,
     2: 18,
     3: 19,
@@ -86,6 +88,12 @@ win_to_mac_keycodes = {
     87: 103,
     88: 111,
 }
+
+# On international keyboards, the "GRAVE ACCENT" and "SECTION SIGN" keys are swapped in location compared to the US keyboard.
+win_to_mac_keycodes_international = copy.copy(win_to_mac_keycodes_us)
+win_to_mac_keycodes_international[41] = win_to_mac_keycodes_us[86]
+win_to_mac_keycodes_international[86] = win_to_mac_keycodes_us[41]
+
 
 # Windows key codes and their standard names
 win_keycodes = {

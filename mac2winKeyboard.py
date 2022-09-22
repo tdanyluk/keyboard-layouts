@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 
 # local modules
 from data.klc_data import (
-    win_to_mac_keycodes, win_keycodes,
+    win_to_mac_keycodes_us, win_to_mac_keycodes_international, win_keycodes,
     klc_keynames, klc_prologue_dummy, klc_epilogue_dummy
 )
 from data.locale_data import (
@@ -51,7 +51,14 @@ replacement_char = '007E'
 
 class KeylayoutParser(object):
 
-    def __init__(self, tree):
+    def __init__(self, tree, physical_layout):
+        if physical_layout == "us":
+            self.win_to_mac_keycodes = win_to_mac_keycodes_us
+        elif physical_layout == "international":
+            self.win_to_mac_keycodes = win_to_mac_keycodes_international
+        else:
+            assert (False)
+
         # raw keys as they are in the layout XML
         self.key_list = []
 
@@ -350,12 +357,12 @@ class KeylayoutParser(object):
         for win_kc_hex, win_kc_name in sorted(win_keycodes.items()):
             win_kc_int = int(win_kc_hex, 16)
 
-            if win_kc_int not in win_to_mac_keycodes:
+            if win_kc_int not in self.win_to_mac_keycodes:
                 print(error_msg_macwin_mismatch.format(
                     win_kc_int, win_keycodes[win_kc_hex]))
                 continue
 
-            mac_kc = win_to_mac_keycodes[win_kc_int]
+            mac_kc = self.win_to_mac_keycodes[win_kc_int]
             if mac_kc not in self.output_dict:
                 print(error_msg_winmac_mismatch.format(
                     win_kc_int, win_keycodes[win_kc_hex], mac_kc))
@@ -604,10 +611,10 @@ def make_klc_filename(keyboard_name):
     return filename
 
 
-def process_input_keylayout(input_keylayout):
+def process_input_keylayout(input_keylayout, physical_layout):
     filtered_xml = filter_xml(input_keylayout)
     tree = ET.XML(filtered_xml)
-    keyboard_data = KeylayoutParser(tree)
+    keyboard_data = KeylayoutParser(tree, physical_layout)
     return keyboard_data
 
 
@@ -683,6 +690,13 @@ def get_args(args=None):
         metavar='DIR',
     )
 
+    parser.add_argument(
+        '--physical-layout',
+        choices=['us', 'international'],
+        help='If you want to generate a US keyboard layout where the key left of "1" is "`", please select "us", otherwise please select "international".',
+        required=True,
+    )
+
     return parser.parse_args(args)
 
 
@@ -694,7 +708,7 @@ def run(args):
     else:
         output_dir = os.path.abspath(os.path.dirname(input_file))
 
-    keyboard_data = process_input_keylayout(input_file)
+    keyboard_data = process_input_keylayout(input_file, args.physical_layout)
     keyboard_name = make_keyboard_name(input_file)
     klc_filename = make_klc_filename(keyboard_name)
     klc_data = make_klc_data(keyboard_name, keyboard_data)
