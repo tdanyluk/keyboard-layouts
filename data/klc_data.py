@@ -266,17 +266,19 @@ klc_prologue_dummy = (
     '''//--\t----\t\t----\t----\t----\t----\t----\t----\t----\r'''
     '''\r'''
 )
-# (keyboard_name, keyboard_description, year, company, company, locale_name, locale_id)
+# (keyboard_name, keyboard_description, year, company_name, company_name, language_tag, language_id)
 
 klc_epilogue_dummy = (
     '''DESCRIPTIONS\r'''
     '''\r'''
-    '''{}\t{}\r'''
+    '''0409\t{}\r'''
     '''\r'''
     '''LANGUAGENAMES\r'''
     '''\r'''
-    '''{}\t{}\r'''
+    '''0409\t{}\r'''
     '''\r'''
     '''ENDKBD'''
 )
-# (locale_id, keyboard_description, locale_id, language_name)
+# (keyboard_description, language_name)
+# We think that the 0409 refers to the language of the descriptions/names, not the language of the keyboard.
+# So we leave it as is - English (United States).

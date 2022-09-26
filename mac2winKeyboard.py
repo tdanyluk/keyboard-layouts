@@ -20,10 +20,6 @@ from data.klc_data import (
     win_to_mac_keycodes_us, win_to_mac_keycodes_international, win_keycodes,
     klc_keynames, klc_prologue_dummy, klc_epilogue_dummy
 )
-from data.locale_data import (
-    locale_id, locale_name, language_name, keyboard_description
-)
-
 error_msg_conversion = (
     'Could not convert composed character {}, '
     'inserting replacement character ({}).'
@@ -47,6 +43,17 @@ os.linesep = '\r\n'
 # Placeholder character for replacing 'ligatures' (more than one character
 # mapped to one key), which are not supported by this conversion script.
 replacement_char = '007E'
+
+
+class KlcAttributes:
+    def __init__(self, company_name, keyboard_name, keyboard_description,
+                 language_id, language_tag, language_name):
+        self.company_name = company_name
+        self.keyboard_name = keyboard_name
+        self.keyboard_description = keyboard_description
+        self.language_id = language_id
+        self.language_tag = language_tag
+        self.language_name = language_name
 
 
 class KeylayoutParser(object):
@@ -641,26 +648,29 @@ def verify_input_file(parser, input_file):
     return input_file
 
 
-def make_klc_prologue(keyboard_name):
-
-    # company = 'Adobe Systems Incorporated'
-    company = 'myCompany'
+def make_klc_prologue(klc_attributes: KlcAttributes):
     year = time.localtime()[0]
 
     return klc_prologue_dummy.format(
-        keyboard_name, keyboard_description, year, company, company,
-        locale_name, locale_id)
+        klc_attributes.keyboard_name,
+        klc_attributes.keyboard_description,
+        year,
+        klc_attributes.company_name,
+        klc_attributes.company_name,
+        klc_attributes.language_tag,
+        klc_attributes.language_id)
 
 
-def make_klc_epilogue():
+def make_klc_epilogue(klc_attributes: KlcAttributes):
 
     return klc_epilogue_dummy.format(
-        locale_id, keyboard_description, locale_id, language_name)
+        klc_attributes.keyboard_description,
+        klc_attributes.language_name)
 
 
-def make_klc_data(keyboard_name, keyboard_data):
-    klc_prologue = make_klc_prologue(keyboard_name)
-    klc_epilogue = make_klc_epilogue()
+def make_klc_data(keyboard_data, klc_attributes):
+    klc_prologue = make_klc_prologue(klc_attributes)
+    klc_epilogue = make_klc_epilogue(klc_attributes)
 
     klc_data = []
     klc_data.extend(klc_prologue.splitlines())
@@ -670,6 +680,23 @@ def make_klc_data(keyboard_name, keyboard_data):
     klc_data.extend(keyboard_data.get_keyname_dead())
     klc_data.extend(klc_epilogue.splitlines())
     return klc_data
+
+
+def ms_language_id(s: str):
+    # Just testing if the conversion is possible.
+    _ = int(s, base=16)
+
+    if len(s) > 4:
+        raise ValueError('more than 4 digits specified')
+
+    return s.lower().rjust(4, '0')
+
+
+def ms_language_tag(s: str):
+    parts = s.split('-')
+    if len(parts) != 2:
+        raise ValueError('there must be one dash character')
+    return parts[0].lower() + '-' + parts[1].upper()
 
 
 def get_args(args=None):
@@ -690,9 +717,41 @@ def get_args(args=None):
     )
 
     parser.add_argument(
-        '--physical-layout',
+        '--physical_layout',
         choices=['us', 'international'],
         help='If you want to generate a US keyboard layout where the key left of "1" is "`", please select "us", otherwise please select "international".',
+        required=True,
+    )
+
+    parser.add_argument(
+        '--language_id',
+        type=ms_language_id,
+        help='MS-LCID. For example "0409" for English (United States).',
+        required=True,
+    )
+
+    parser.add_argument(
+        '--language_tag',
+        type=ms_language_tag,
+        help='MS language tag. For example "en-US" for English (United States).',
+        required=True,
+    )
+
+    parser.add_argument(
+        '--language_name',
+        help='Language name. For example "English (United States)".',
+        required=True,
+    )
+
+    parser.add_argument(
+        '--keyboard_description',
+        help='Keyboard description. For example "US - Mac".',
+        required=True,
+    )
+
+    parser.add_argument(
+        '--company_name',
+        help='Company Name. For example "My Company".',
         required=True,
     )
 
@@ -710,7 +769,13 @@ def run(args):
     keyboard_data = process_input_keylayout(input_file, args.physical_layout)
     keyboard_name = make_keyboard_name(input_file)
     klc_filename = make_klc_filename(keyboard_name)
-    klc_data = make_klc_data(keyboard_name, keyboard_data)
+    klc_attributes = KlcAttributes(company_name=args.company_name,
+                                   keyboard_name=keyboard_name,
+                                   keyboard_description=args.keyboard_description,
+                                   language_id=args.language_id,
+                                   language_tag=args.language_tag,
+                                   language_name=args.language_name)
+    klc_data = make_klc_data(keyboard_data, klc_attributes)
 
     output_path = os.sep.join((output_dir, klc_filename))
     with codecs.open(output_path, 'w', 'utf-16') as output_file:

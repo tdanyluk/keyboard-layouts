@@ -10,6 +10,79 @@ def _actualize_year(s):
     return s.replace("(c) 2021", "(c) {}".format(year))
 
 
+def _make_dummy_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='dummy',
+                         keyboard_description='Dummy - Mac',
+                         language_id='0409',
+                         language_tag='en-US',
+                         language_name='English (United States)')
+
+def _make_dummy_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'us'
+    args.language_id = '0409'
+    args.language_tag = 'en-US'
+    args.language_name = 'English (United States)'
+    args.keyboard_description = 'Dummy - Mac'
+    args.company_name = 'myCompany'
+    return args
+
+
+def _make_french_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='french',
+                         keyboard_description='French - Mac',
+                         language_id='040c',
+                         language_tag='fr-FR',
+                         language_name='French (France)')
+
+def _make_french_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'international'
+    args.language_id = '040c'
+    args.language_tag = 'fr-FR'
+    args.language_name = 'French (France)'
+    args.keyboard_description = 'French - Mac'
+    args.company_name = 'myCompany'
+    return args
+
+def _make_sgcap_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='sgcap',
+                         keyboard_description='SGCAP example - Mac',
+                         language_id='0409',
+                         language_tag='en-US',
+                         language_name='English (United States)')
+
+def _make_sgcap_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'us'
+    args.language_id = '0409'
+    args.language_tag = 'en-US'
+    args.language_name = 'English (United States)'
+    args.keyboard_description = 'SGCAP example - Mac'
+    args.company_name = 'myCompany'
+    return args
+
+def _make_us_test_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='us_test',
+                         keyboard_description='US - Mac',
+                         language_id='0409',
+                         language_tag='en-US',
+                         language_name='English (United States)')
+
+def _make_us_test_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'us'
+    args.language_id = '0409'
+    args.language_tag = 'en-US'
+    args.language_name = 'English (United States)'
+    args.keyboard_description = 'US - Mac'
+    args.company_name = 'myCompany'
+    return args
+
 class KLTest(unittest.TestCase):
 
     def test_char_description(self):
@@ -97,44 +170,37 @@ class KLTest(unittest.TestCase):
         )
 
     def test_make_klc_data(self):
-        input_keylayout = os.path.join('tests', 'us_test.keylayout')
-        output_klc = os.path.join('tests', 'us_test.klc')
-        keyboard_data = process_input_keylayout(input_keylayout, 'us')
-        keyboard_name = make_keyboard_name(input_keylayout)
-        with codecs.open(output_klc, 'r', 'utf-16') as raw_klc:
-            klc_data = _actualize_year(raw_klc.read())
-        self.assertEqual(
-            make_klc_data(keyboard_name, keyboard_data),
-            klc_data.splitlines())
-
-        input_keylayout = os.path.join('tests', 'dummy.keylayout')
-        output_klc = os.path.join('tests', 'dummy.klc')
-        keyboard_data = process_input_keylayout(input_keylayout, 'us')
-        keyboard_name = make_keyboard_name(input_keylayout)
-        with codecs.open(output_klc, 'r', 'utf-16') as raw_klc:
-            klc_data = _actualize_year(raw_klc.read())
-        self.assertEqual(
-            make_klc_data(keyboard_name, keyboard_data),
-            klc_data.splitlines())
+        for attributes, physical_layout in [
+            (_make_dummy_klc_attributes(), 'us'),
+            (_make_french_klc_attributes(), 'international'),
+            (_make_sgcap_klc_attributes(), 'us'),
+            (_make_us_test_klc_attributes(), 'us'),
+        ]:
+            input_keylayout = os.path.join('tests', attributes.keyboard_name + '.keylayout')
+            output_klc = os.path.join('tests', attributes.keyboard_name + '.klc')
+            keyboard_data = process_input_keylayout(input_keylayout, physical_layout)
+            self.assertEqual(make_keyboard_name(input_keylayout), attributes.keyboard_name)
+            with codecs.open(output_klc, 'r', 'utf-16') as raw_klc:
+                klc_data = _actualize_year(raw_klc.read())
+            self.assertEqual(
+                make_klc_data(keyboard_data, attributes),
+                klc_data.splitlines())
 
     def test_run(self):
         import tempfile
 
-        for sample_keylayout, physical_layout in [
-            ('us_test.keylayout', 'us'),
-            ('sgcap.keylayout', 'us'),
-            ('french.keylayout', 'international')
+        for keyboard_name, args in [
+            ('dummy', _make_dummy_args()),
+            ('french', _make_french_args()),
+            ('sgcap', _make_sgcap_args()),
+            ('us_test', _make_us_test_args()),
         ]:
-            klc_filename = sample_keylayout.split('.')[0] + '.klc'
             temp_dir = tempfile.gettempdir()
-            args = argparse.ArgumentParser()
-            input_keylayout = os.path.join('tests', sample_keylayout)
-            args.input = input_keylayout
+            args.input = os.path.join('tests', keyboard_name + '.keylayout')
             args.output_dir = temp_dir
-            args.physical_layout = physical_layout
             run(args)
-            output_klc = os.path.join(temp_dir, klc_filename)
-            example_klc = os.path.join('tests', klc_filename)
+            output_klc = os.path.join(temp_dir, keyboard_name + '.klc')
+            example_klc = os.path.join('tests', keyboard_name + '.klc')
             with open(example_klc, 'r', encoding='utf-16') as xklc:
                 example_klc_data = _actualize_year(xklc.read())
             with open(output_klc, 'r', encoding='utf-16') as oklc:
