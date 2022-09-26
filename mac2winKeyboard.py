@@ -21,7 +21,7 @@ from data.klc_data import (
     klc_keynames, klc_prologue_dummy, klc_epilogue_dummy
 )
 from data.locale_data import (
-    locale_id, locale_id_long, locale_tag, locale_name, locale_name_long,
+    locale_id, locale_name, language_name, keyboard_description
 )
 
 error_msg_conversion = (
@@ -386,7 +386,6 @@ class KeylayoutParser(object):
             # key_table[10]: descriptions.
 
             key_table = list((win_kc_hex, win_kc_name)) + ([""] * 9)
-
             default_output = self.get_key_output(outputs, 'default')
             shift_output = self.get_key_output(outputs, 'shift')
             alt_output = self.get_key_output(outputs, 'alt')
@@ -649,19 +648,19 @@ def make_klc_prologue(keyboard_name):
     year = time.localtime()[0]
 
     return klc_prologue_dummy.format(
-        locale_tag, keyboard_name, year, company, company,
-        locale_name, locale_id_long)
+        keyboard_name, keyboard_description, year, company, company,
+        locale_name, locale_id)
 
 
-def make_klc_epilogue(keyboard_name):
+def make_klc_epilogue():
 
     return klc_epilogue_dummy.format(
-        locale_id, keyboard_name, locale_id, locale_name_long)
+        locale_id, keyboard_description, locale_id, language_name)
 
 
 def make_klc_data(keyboard_name, keyboard_data):
     klc_prologue = make_klc_prologue(keyboard_name)
-    klc_epilogue = make_klc_epilogue(keyboard_name)
+    klc_epilogue = make_klc_epilogue()
 
     klc_data = []
     klc_data.extend(klc_prologue.splitlines())

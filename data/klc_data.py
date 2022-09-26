@@ -247,7 +247,7 @@ klc_prologue_dummy = (
     '''\r'''
     '''LOCALENAME\t"{}"\r'''
     '''\r'''
-    '''LOCALEID\t"{}"\r'''
+    '''LOCALEID\t"0000{}"\r'''
     '''\r'''
     '''VERSION\t1.0\r'''
     '''\r'''
@@ -266,7 +266,7 @@ klc_prologue_dummy = (
     '''//--\t----\t\t----\t----\t----\t----\t----\t----\t----\r'''
     '''\r'''
 )
-# (name, keyboard_name, year, company, company, locale_name, locale_id_long)
+# (keyboard_name, keyboard_description, year, company, company, locale_name, locale_id)
 
 klc_epilogue_dummy = (
     '''DESCRIPTIONS\r'''
@@ -279,4 +279,4 @@ klc_epilogue_dummy = (
     '''\r'''
     '''ENDKBD'''
 )
-# (locale_id, keyboard_name, locale_id, locale_name_long)
+# (locale_id, keyboard_description, locale_id, language_name)
