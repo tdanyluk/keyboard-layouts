@@ -37,6 +37,7 @@ def _make_french_klc_attributes():
                          language_tag='fr-FR',
                          language_name='French (France)')
 
+
 def _make_french_args():
     args = argparse.ArgumentParser()
     args.physical_layout = 'international'
@@ -46,6 +47,27 @@ def _make_french_args():
     args.keyboard_description = 'French - Mac'
     args.company_name = 'myCompany'
     return args
+
+
+def _make_german_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='german',
+                         keyboard_description='German - Mac',
+                         language_id='0407',
+                         language_tag='de-DE',
+                         language_name='German (Germany)')
+
+
+def _make_german_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'international'
+    args.language_id = '0407'
+    args.language_tag = 'de-DE'
+    args.language_name = 'German (Germany)'
+    args.keyboard_description = 'German - Mac'
+    args.company_name = 'myCompany'
+    return args
+
 
 def _make_sgcap_klc_attributes():
     return KlcAttributes(company_name='myCompany',
@@ -173,6 +195,7 @@ class KLTest(unittest.TestCase):
         for attributes, physical_layout in [
             (_make_dummy_klc_attributes(), 'us'),
             (_make_french_klc_attributes(), 'international'),
+            (_make_german_klc_attributes(), 'international'),
             (_make_sgcap_klc_attributes(), 'us'),
             (_make_us_test_klc_attributes(), 'us'),
         ]:
@@ -192,6 +215,7 @@ class KLTest(unittest.TestCase):
         for keyboard_name, args in [
             ('dummy', _make_dummy_args()),
             ('french', _make_french_args()),
+            ('german', _make_german_args()),
             ('sgcap', _make_sgcap_args()),
             ('us_test', _make_us_test_args()),
         ]:

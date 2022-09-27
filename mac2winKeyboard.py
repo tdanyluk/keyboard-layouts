@@ -45,6 +45,38 @@ os.linesep = '\r\n'
 replacement_char = '007E'
 
 
+def _remove_from_set(s: set, e):
+    if e in s:
+        s.remove(e)
+
+
+def _replace_in_set(s: set, e, f):
+    if e in s:
+        s.remove(e)
+        s.add(f)
+
+
+def _simplifyStates(states: set):
+    '''
+    Simplify modifier state set, to make sure that we can recognize the most
+    important ones. We remove all optional references to right
+    shift/option/control and replace all references to left
+    shift/option/control with anyShift/anyOption/anyControl. This is similar
+    to the simplification that Ukelele is capable of doing.
+    '''
+    states = set(states)
+    _remove_from_set(states, 'rightShift?')
+    _remove_from_set(states, 'rightOption?')
+    _remove_from_set(states, 'rightControl?')
+    _replace_in_set(states, 'shift', 'anyShift')
+    _replace_in_set(states, 'option', 'anyOption')
+    _replace_in_set(states, 'control', 'anyControl')
+    _replace_in_set(states, 'shift?', 'anyShift?')
+    _replace_in_set(states, 'option?', 'anyOption?')
+    _replace_in_set(states, 'control?', 'anyControl?')
+    return states
+
+
 class KlcAttributes:
     def __init__(self, company_name, keyboard_name, keyboard_description,
                  language_id, language_tag, language_name):
@@ -150,8 +182,8 @@ class KeylayoutParser(object):
                     keymap_idx_list.append(keymap_index)
 
                     keymap = parent.get('mapIndex')
-                    states = set(modifier.get('keys').split())
-
+                    states = _simplifyStates(set(modifier.get('keys').split()))
+                    
                     self.check_states(
                         states, keymap, default_max, default_min, 'default')
                     self.check_states(
