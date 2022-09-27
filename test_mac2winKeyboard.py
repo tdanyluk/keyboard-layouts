@@ -7,7 +7,7 @@ from mac2winKeyboard import *
 
 def _actualize_year(s):
     year = time.localtime()[0]
-    return s.replace("(c) 2021", "(c) {}".format(year))
+    return s.replace("(c) $YEAR", "(c) {}".format(year))
 
 
 def _make_dummy_klc_attributes():
