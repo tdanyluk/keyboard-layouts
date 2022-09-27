@@ -238,7 +238,7 @@ klc_keynames = [
     '5c\t"Right Windows"',
     '5d\tApplication']
 
-klc_prologue_dummy = (
+klc_prologue_dummy_all_shift_states = (
     '''KBD\t{}\t"{}"\r'''
     '''\r'''
     '''COPYRIGHT\t"(c) {} {}"\r'''
@@ -259,6 +259,34 @@ klc_prologue_dummy = (
     '''3\t//Column 7 : Shft  Ctrl\r'''
     '''6\t//Column 8 :       Ctrl Alt\r'''
     '''7\t//Column 9 : Shft  Ctrl Alt\r'''
+    '''\r'''
+    '''LAYOUT\t\t;an extra '@' at the end is a dead key\r'''
+    '''\r'''
+    '''//SC\tVK_\t\tCap\t0\t1\t2\t3\t6\t7\r'''
+    '''//--\t----\t\t----\t----\t----\t----\t----\t----\t----\r'''
+    '''\r'''
+)
+# (keyboard_name, keyboard_description, year, company_name, company_name, language_tag, language_id)
+
+klc_prologue_dummy_common_shift_states = (
+    '''KBD\t{}\t"{}"\r'''
+    '''\r'''
+    '''COPYRIGHT\t"(c) {} {}"\r'''
+    '''\r'''
+    '''COMPANY\t"{}"\r'''
+    '''\r'''
+    '''LOCALENAME\t"{}"\r'''
+    '''\r'''
+    '''LOCALEID\t"0000{}"\r'''
+    '''\r'''
+    '''VERSION\t1.0\r'''
+    '''\r'''
+    '''SHIFTSTATE\r'''
+    '''\r'''
+    '''0\t//Column 4\r'''
+    '''1\t//Column 5 : Shft\r'''
+    '''6\t//Column 6 :       Ctrl Alt\r'''
+    '''7\t//Column 7 : Shft  Ctrl Alt\r'''
     '''\r'''
     '''LAYOUT\t\t;an extra '@' at the end is a dead key\r'''
     '''\r'''

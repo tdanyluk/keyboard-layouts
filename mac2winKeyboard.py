@@ -18,7 +18,8 @@ import xml.etree.ElementTree as ET
 # local modules
 from data.klc_data import (
     win_to_mac_keycodes_us, win_to_mac_keycodes_international, win_keycodes,
-    klc_keynames, klc_prologue_dummy, klc_epilogue_dummy
+    klc_keynames, klc_prologue_dummy_all_shift_states, klc_prologue_dummy_common_shift_states,
+    klc_epilogue_dummy
 )
 error_msg_conversion = (
     'Could not convert composed character {}, '
@@ -98,13 +99,20 @@ class KlcAttributes:
 
 class KeylayoutParser(object):
 
-    def __init__(self, tree, physical_layout):
+    def __init__(self, tree, physical_layout, shift_states):
         if physical_layout == "us":
             self.win_to_mac_keycodes = win_to_mac_keycodes_us
         elif physical_layout == "international":
             self.win_to_mac_keycodes = win_to_mac_keycodes_international
         else:
-            assert (False)
+            assert False
+
+        if shift_states == "all":
+            self.append_to_key_table = self._append_to_key_table_all_shift_states
+        elif shift_states == "common":
+            self.append_to_key_table = self._append_to_key_table_common_shift_states
+        else:
+            assert False
 
         # raw keys as they are in the layout XML
         self.key_list = []
@@ -400,22 +408,26 @@ class KeylayoutParser(object):
 
     def get_key_table(self):
         kt_output = []
-        for win_kc_hex, win_kc_name in sorted(win_keycodes.items()):
-            win_kc_int = int(win_kc_hex, 16)
+        for win_sc_hex, win_vk_name in sorted(win_keycodes.items()):
+            win_sc_int = int(win_sc_hex, 16)
 
-            if win_kc_int not in self.win_to_mac_keycodes:
+            if win_sc_int not in self.win_to_mac_keycodes:
                 print(error_msg_macwin_mismatch.format(
-                    win_kc_int, win_keycodes[win_kc_hex]))
+                    win_sc_int, win_keycodes[win_sc_hex]))
                 continue
 
-            mac_kc = self.win_to_mac_keycodes[win_kc_int]
+            mac_kc = self.win_to_mac_keycodes[win_sc_int]
             if mac_kc not in self.output_dict:
                 print(error_msg_winmac_mismatch.format(
-                    win_kc_int, win_keycodes[win_kc_hex], mac_kc))
+                    win_sc_int, win_keycodes[win_sc_hex], mac_kc))
                 continue
+            
+            self.append_to_key_table(kt_output, mac_kc, win_sc_hex, win_vk_name)
 
-            outputs = self.output_dict[mac_kc]
+        return kt_output
 
+    def _append_to_key_table_all_shift_states(
+            self, kt_output: list, mac_kc: int, win_sc_hex: str, win_vk_name: str):
             # The key_table follows the syntax of the .klc file.
             # The columns are as follows:
 
@@ -431,7 +443,9 @@ class KeylayoutParser(object):
             # key_table[9]: output for altGr-shift (= ctrl-alt-shift)
             # key_table[10]: descriptions.
 
-            key_table = list((win_kc_hex, win_kc_name)) + ([""] * 9)
+            outputs = self.output_dict[mac_kc]
+
+            key_table = list((win_sc_hex, win_vk_name)) + ([""] * 9)
             default_output = self.get_key_output(outputs, 'default')
             shift_output = self.get_key_output(outputs, 'shift')
             alt_output = self.get_key_output(outputs, 'alt')
@@ -477,12 +491,72 @@ class KeylayoutParser(object):
             kt_output.append('\t'.join(key_table))
 
             if key_table[3] == 'SGCap':
-                kt_output.append((
-                    f'-1\t-1\t\t0\t{caps_output}\t'
-                    f'{shiftcaps_output}\t\t\t\t\t'
-                    f'// {char_description(caps_output)}, '
-                    f'{char_description(shiftcaps_output)}'))
-        return kt_output
+                kt_output.append(
+                    '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '', '', '',
+                               f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
+                )
+
+    def _append_to_key_table_common_shift_states(
+            self, kt_output: list, mac_kc: int, win_sc_hex: str, win_vk_name: str):
+            # The key_table follows the syntax of the .klc file.
+            # The columns are as follows:
+
+            # key_table[0]: scan code
+            # key_table[1]: virtual key
+            # key_table[2]: spacer (empty)
+            # key_table[3]: caps (on or off, or SGCaps flag)
+            # key_table[4]: output for default state
+            # key_table[5]: output for shift
+            # key_table[6]: output for altGr (= ctrl-alt)
+            # key_table[7]: output for altGr-shift (= ctrl-alt-shift)
+            # key_table[8]: descriptions.
+
+            outputs = self.output_dict[mac_kc]
+
+            key_table = list((win_sc_hex, win_vk_name)) + ([""] * 7)
+            default_output = self.get_key_output(outputs, 'default')
+            shift_output = self.get_key_output(outputs, 'shift')
+            alt_output = self.get_key_output(outputs, 'alt')
+            altshift_output = self.get_key_output(outputs, 'altshift')
+            caps_output = self.get_key_output(outputs, 'caps')
+            shiftcaps_output = self.get_key_output(outputs, 'shiftcaps')
+
+            # Check if the caps lock output equals the shift key,
+            # to set the caps lock status.
+            if caps_output == default_output:
+                key_table[3] = '0'
+            elif caps_output == shift_output:
+                key_table[3] = '1'
+            else:
+                # SGCaps are a Windows specialty, necessary if the caps lock
+                # state is different from shift.
+                # Usually, they accommodate an alternate writing system.
+                # SGCaps + Shift is possible, boosting the available
+                # shift states to 6.
+                key_table[3] = 'SGCap'
+                print('Info: SGCap character converted: '
+                      'default: {}, shift: {}, caps: {}'.format(
+                          char_description(default_output),
+                          char_description(shift_output),
+                          char_description(caps_output)))
+
+            key_table[4] = default_output
+            key_table[5] = shift_output
+            key_table[6] = alt_output
+            key_table[7] = altshift_output
+            key_table[8] = (
+                f'// {char_description(default_output)}, '
+                f'{char_description(shift_output)}, '
+                f'{char_description(alt_output)}, '
+                f'{char_description(altshift_output)}')  # key descriptions
+
+            kt_output.append('\t'.join(key_table))
+
+            if key_table[3] == 'SGCap':
+                kt_output.append(
+                    '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '',
+                               f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
+                )
 
     def get_deadkey_table(self):
         '''
@@ -681,10 +755,10 @@ def make_klc_filename(keyboard_name):
     return filename
 
 
-def process_input_keylayout(input_keylayout, physical_layout):
+def process_input_keylayout(input_keylayout, physical_layout, shift_states):
     filtered_xml = filter_xml(input_keylayout)
     tree = ET.XML(filtered_xml)
-    keyboard_data = KeylayoutParser(tree, physical_layout)
+    keyboard_data = KeylayoutParser(tree, physical_layout, shift_states)
     return keyboard_data
 
 
@@ -712,19 +786,25 @@ def verify_input_file(parser, input_file):
     return input_file
 
 
-def make_klc_prologue(klc_attributes: KlcAttributes):
+def make_klc_prologue(klc_attributes: KlcAttributes, shift_states: str):
     year = time.localtime()[0]
 
-    return klc_prologue_dummy.format(
-        klc_attributes.keyboard_name,
-        klc_attributes.keyboard_description,
-        year,
-        klc_attributes.company_name,
-        klc_attributes.company_name,
-        klc_attributes.language_tag,
-        klc_attributes.language_id)
-
-
+    if shift_states == "all":
+        prologue = klc_prologue_dummy_all_shift_states
+    elif shift_states == "common":
+        prologue = klc_prologue_dummy_common_shift_states
+    else:
+        assert False
+    
+    return prologue.format(
+            klc_attributes.keyboard_name,
+            klc_attributes.keyboard_description,
+            year,
+            klc_attributes.company_name,
+            klc_attributes.company_name,
+            klc_attributes.language_tag,
+            klc_attributes.language_id)
+    
 def make_klc_epilogue(klc_attributes: KlcAttributes):
 
     return klc_epilogue_dummy.format(
@@ -732,8 +812,8 @@ def make_klc_epilogue(klc_attributes: KlcAttributes):
         klc_attributes.language_name)
 
 
-def make_klc_data(keyboard_data, klc_attributes):
-    klc_prologue = make_klc_prologue(klc_attributes)
+def make_klc_data(keyboard_data, klc_attributes, shift_states):
+    klc_prologue = make_klc_prologue(klc_attributes, shift_states)
     klc_epilogue = make_klc_epilogue(klc_attributes)
 
     klc_data = []
@@ -819,6 +899,13 @@ def get_args(args=None):
         required=True,
     )
 
+    parser.add_argument(
+        '--shift_states',
+        choices=['all', 'common'],
+        help='Shift states: "common" means: Default, Shift, AltGr, Shift + AltGr',
+        default='all',
+    )
+
     return parser.parse_args(args)
 
 
@@ -830,7 +917,7 @@ def run(args):
     else:
         output_dir = os.path.abspath(os.path.dirname(input_file))
 
-    keyboard_data = process_input_keylayout(input_file, args.physical_layout)
+    keyboard_data = process_input_keylayout(input_file, args.physical_layout, args.shift_states)
     keyboard_name = make_keyboard_name(input_file)
     klc_filename = make_klc_filename(keyboard_name)
     klc_attributes = KlcAttributes(company_name=args.company_name,
@@ -839,7 +926,7 @@ def run(args):
                                    language_id=args.language_id,
                                    language_tag=args.language_tag,
                                    language_name=args.language_name)
-    klc_data = make_klc_data(keyboard_data, klc_attributes)
+    klc_data = make_klc_data(keyboard_data, klc_attributes, args.shift_states)
 
     output_path = os.sep.join((output_dir, klc_filename))
     with codecs.open(output_path, 'w', 'utf-16') as output_file:

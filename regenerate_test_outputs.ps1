@@ -11,10 +11,24 @@ python.exe .\mac2winKeyboard.py .\tests\french.keylayout `
   --keyboard_description "French - Mac" `
   --company_name "myCompany"
 
+python.exe .\mac2winKeyboard.py .\tests\frenchc.keylayout `
+  --physical_layout international `
+  --shift_states common `
+  --language_id 40c --language_tag fr-FR --language_name "French (France)" `
+  --keyboard_description "French - common shift states only - Mac" `
+  --company_name "myCompany"
+
 python.exe .\mac2winKeyboard.py .\tests\german.keylayout `
   --physical_layout international `
   --language_id 407 --language_tag de-DE --language_name "German (Germany)" `
   --keyboard_description "German - Mac" `
+  --company_name "myCompany"
+
+python.exe .\mac2winKeyboard.py .\tests\germanc.keylayout `
+  --physical_layout international `
+  --shift_states common `
+  --language_id 407 --language_tag de-DE --language_name "German (Germany)" `
+  --keyboard_description "German - common shift states only - Mac" `
   --company_name "myCompany"
 
 python.exe .\mac2winKeyboard.py .\tests\sgcap.keylayout `
