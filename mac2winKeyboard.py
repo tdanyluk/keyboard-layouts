@@ -24,6 +24,14 @@ error_msg_conversion = (
     'Could not convert composed character {}, '
     'inserting replacement character ({}).'
 )
+error_msg_apple_logo = (
+    'Could not convert Apple logo {}, '
+    'inserting replacement character ({}).'
+)
+error_msg_private_use_character = (
+    'Could not convert private use area character {}, '
+    'inserting replacement character ({}).'
+)
 error_msg_filename = (
     'Too many digits for a Windows-style (8+3) filename. '
     'Please rename the source file.')
@@ -533,20 +541,39 @@ def codepoint_from_char(character):
     Return a 4 or 5-digit Unicode hex string for the passed character.
     '''
 
+    # For now, 'ligatures' (2 or more code points assigned to one key)
+    # are not supported in this conversion script.
+    # Ligature support on Windows keyboards is spotty (no ligatures in
+    # Caps Lock states, for instance), and limited to four code points
+    # per key. Used in very few keyboard layouts only, the decision was
+    # made to insert a placeholder instead.
     try:
-        return '{0:04x}'.format(ord(character))
-
-        # For now, 'ligatures' (2 or more code points assigned to one key)
-        # are not supported in this conversion script.
-        # Ligature support on Windows keyboards is spotty (no ligatures in
-        # Caps Lock states, for instance), and limited to four code points
-        # per key. Used in very few keyboard layouts only, the decision was
-        # made to insert a placeholder instead.
-
+        codepoint = ord(character)
     except TypeError:
         print(error_msg_conversion.format(
             character, char_description(replacement_char)))
         return replacement_char
+
+    # The Apple logo character can not be displayed on Windows,
+    # so we are replacing it with a placeholder.
+    if codepoint == 0xF8FF:
+        print(error_msg_apple_logo.format(
+            '0x{:04x}'.format(codepoint),
+            char_description(replacement_char)))
+        return replacement_char
+
+    # Characters from the Unicode Private Use Area can not be displayed
+    # on Windows, so we are replacing them with a placeholder.
+    # We are not aware of any such character other than the Apple logo.
+    if ((codepoint >= 0xE000 and codepoint <= 0xF8FF)
+        or (codepoint >= 0xF0000 and codepoint <= 0xFFFFD)
+            or (codepoint >= 0x100000 and codepoint <= 0x10FFFD)):
+        print(error_msg_private_use_character.format(
+            '0x{:04x}'.format(codepoint),
+            char_description(replacement_char)))
+        return replacement_char
+
+    return '{0:04x}'.format(codepoint)
 
 
 def char_from_hex(hex_string):
