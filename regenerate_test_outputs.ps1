@@ -18,6 +18,13 @@ python.exe .\mac2winKeyboard.py .\tests\frenchc.keylayout `
   --keyboard_description "French - common shift states only - Mac" `
   --company_name "myCompany"
 
+python.exe .\mac2winKeyboard.py .\tests\frenchf.keylayout `
+  --physical_layout international `
+  --fix_virtual_keys `
+  --language_id 40c --language_tag fr-FR --language_name "French (France)" `
+  --keyboard_description "French - fixed virtual keys - Mac" `
+  --company_name "myCompany"
+
 python.exe .\mac2winKeyboard.py .\tests\german.keylayout `
   --physical_layout international `
   --language_id 407 --language_tag de-DE --language_name "German (Germany)" `

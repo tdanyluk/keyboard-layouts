@@ -28,6 +28,7 @@ def _make_dummy_args():
     args.keyboard_description = 'Dummy - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'all'
+    args.fix_virtual_keys = False
     return args
 
 
@@ -49,6 +50,7 @@ def _make_french_args():
     args.keyboard_description = 'French - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'all'
+    args.fix_virtual_keys = False
     return args
 
 
@@ -70,6 +72,29 @@ def _make_french_common_args():
     args.keyboard_description = 'French - common shift states only - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'common'
+    args.fix_virtual_keys = False
+    return args
+
+
+def _make_french_fix_vk_klc_attributes():
+    return KlcAttributes(company_name='myCompany',
+                         keyboard_name='frenchf',
+                         keyboard_description='French - fixed virtual keys - Mac',
+                         language_id='040c',
+                         language_tag='fr-FR',
+                         language_name='French (France)')
+
+
+def _make_french_fix_vk_args():
+    args = argparse.ArgumentParser()
+    args.physical_layout = 'international'
+    args.language_id = '040c'
+    args.language_tag = 'fr-FR'
+    args.language_name = 'French (France)'
+    args.keyboard_description = 'French - fixed virtual keys - Mac'
+    args.company_name = 'myCompany'
+    args.shift_states = 'all'
+    args.fix_virtual_keys = True
     return args
 
 
@@ -91,6 +116,7 @@ def _make_german_args():
     args.keyboard_description = 'German - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'all'
+    args.fix_virtual_keys = False
     return args
 
 
@@ -112,6 +138,7 @@ def _make_german_common_args():
     args.keyboard_description = 'German - common shift states only - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'common'
+    args.fix_virtual_keys = False
     return args
 
 
@@ -133,6 +160,7 @@ def _make_sgcap_args():
     args.keyboard_description = 'SGCAP example - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'all'
+    args.fix_virtual_keys = False
     return args
 
 
@@ -144,6 +172,7 @@ def _make_us_test_klc_attributes():
                          language_tag='en-US',
                          language_name='English (United States)')
 
+
 def _make_us_test_args():
     args = argparse.ArgumentParser()
     args.physical_layout = 'us'
@@ -153,7 +182,9 @@ def _make_us_test_args():
     args.keyboard_description = 'US - Mac'
     args.company_name = 'myCompany'
     args.shift_states = 'all'
+    args.fix_virtual_keys = False
     return args
+
 
 class KLTest(unittest.TestCase):
 
@@ -242,19 +273,26 @@ class KLTest(unittest.TestCase):
         )
 
     def test_make_klc_data(self):
-        for attributes, physical_layout, shift_states in [
-            (_make_dummy_klc_attributes(), 'us', 'all'),
-            (_make_french_klc_attributes(), 'international', 'all'),
-            (_make_french_common_klc_attributes(), 'international', 'common'),
-            (_make_german_klc_attributes(), 'international', 'all'),
-            (_make_german_common_klc_attributes(), 'international', 'common'),
-            (_make_sgcap_klc_attributes(), 'us', 'all'),
-            (_make_us_test_klc_attributes(), 'us', 'all'),
+        for attributes, physical_layout, shift_states, fix_vk in [
+            (_make_dummy_klc_attributes(), 'us', 'all', False),
+            (_make_french_klc_attributes(), 'international', 'all', False),
+            (_make_french_common_klc_attributes(),
+             'international', 'common', False),
+            (_make_french_fix_vk_klc_attributes(), 'international', 'all', True),
+            (_make_german_klc_attributes(), 'international', 'all', False),
+            (_make_german_common_klc_attributes(),
+             'international', 'common', False),
+            (_make_sgcap_klc_attributes(), 'us', 'all', False),
+            (_make_us_test_klc_attributes(), 'us', 'all', False),
         ]:
-            input_keylayout = os.path.join('tests', attributes.keyboard_name + '.keylayout')
-            output_klc = os.path.join('tests', attributes.keyboard_name + '.klc')
-            keyboard_data = process_input_keylayout(input_keylayout, physical_layout, shift_states)
-            self.assertEqual(make_keyboard_name(input_keylayout), attributes.keyboard_name)
+            input_keylayout = os.path.join(
+                'tests', attributes.keyboard_name + '.keylayout')
+            output_klc = os.path.join(
+                'tests', attributes.keyboard_name + '.klc')
+            keyboard_data = process_input_keylayout(
+                input_keylayout, physical_layout, shift_states, fix_vk)
+            self.assertEqual(make_keyboard_name(
+                input_keylayout), attributes.keyboard_name)
             with codecs.open(output_klc, 'r', 'utf-16') as raw_klc:
                 klc_data = _actualize_year(raw_klc.read())
             self.assertEqual(
@@ -268,6 +306,7 @@ class KLTest(unittest.TestCase):
             ('dummy', _make_dummy_args()),
             ('french', _make_french_args()),
             ('frenchc', _make_french_common_args()),
+            ('frenchf', _make_french_fix_vk_args()),
             ('german', _make_german_args()),
             ('germanc', _make_german_common_args()),
             ('sgcap', _make_sgcap_args()),

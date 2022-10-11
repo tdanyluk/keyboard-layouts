@@ -6,6 +6,7 @@ equivalent Windows files (.klc).
 
 import os
 import re
+import string
 import sys
 import time
 
@@ -86,6 +87,55 @@ def _simplifyStates(states: set):
     return states
 
 
+def _fix_vk(vk, default_codepoint: str, shift_codepoint: str):
+    """
+    On some keyboard layouts the [0-9a-z] keys are at a different location
+    compared to US English. In this case, we should also set the virtual-key
+    codes according to the letter/digit on each key. Otherwise, some shortcuts
+    wouldn't work as expected. This fix only fixes the virtual-key codes of the
+    [0-9a-z] keys, so it is not a full solution for harmonizing all virtual-key
+    codes with the label of the key. These shortcuts were considered:
+    Ctrl-0: Original zoom
+    Ctrl-A: Select all
+    Ctrl-Z: Undo, Ctrl-Y: Redo
+    Ctrl-X: Cut, Ctrl-C: Copy, Ctrl-V: Paste
+    Microsoft Keyboard Layout Creator doesn't like duplicate virtual-keys, so
+    we try to avoid those.
+    The scan codes do not need similar fixing, as they roughly correspond to
+    the physical location of the keys. 
+    """
+
+    default_char = char_from_hex(default_codepoint.removesuffix('@'))
+    shift_char = char_from_hex(shift_codepoint.removesuffix('@'))
+
+    # On the Hungarian keyboard, the order of keys is
+    # 0123456789ö instead of `1234567890 (US)
+    if vk == '0' and default_char != '0' and shift_char != '0':
+        return 'OEM_3'
+    if vk == 'OEM_3' and (default_char == '0' or shift_char == '0'):
+        return '0'
+
+    # On the French keyboard, the M is at the location of ';' (US).
+    # This conversion avoids duplicate virtual-keys.
+    if vk == 'M' and default_char != 'm':
+        return 'OEM_1'
+
+    # We map VK_$X to character $X for all "English" characters.
+    # This fixes layouts such as French or German, where some characters are at
+    # different locations compared to the US layout.
+    if default_char in string.ascii_lowercase:
+        return default_char.upper()
+
+    return vk
+
+
+def _fix_vk_and_log(vk, default_codepoint, shift_codepoint):
+    new_vk = _fix_vk(vk, default_codepoint, shift_codepoint)
+    if vk != new_vk:
+        print("VK_{} -> VK_{}".format(vk, new_vk))
+    return new_vk
+
+
 class KlcAttributes:
     def __init__(self, company_name, keyboard_name, keyboard_description,
                  language_id, language_tag, language_name):
@@ -99,7 +149,7 @@ class KlcAttributes:
 
 class KeylayoutParser(object):
 
-    def __init__(self, tree, physical_layout, shift_states):
+    def __init__(self, tree, physical_layout, shift_states, fix_vk):
         if physical_layout == "us":
             self.win_to_mac_keycodes = win_to_mac_keycodes_us
         elif physical_layout == "international":
@@ -113,6 +163,9 @@ class KeylayoutParser(object):
             self.append_to_key_table = self._append_to_key_table_common_shift_states
         else:
             assert False
+
+        # Should we try to fix virtual key codes
+        self.fix_vk = fix_vk
 
         # raw keys as they are in the layout XML
         self.key_list = []
@@ -199,7 +252,7 @@ class KeylayoutParser(object):
 
                     keymap = parent.get('mapIndex')
                     states = _simplifyStates(set(modifier.get('keys').split()))
-                    
+
                     self.check_states(
                         states, keymap, default_max, default_min, 'default')
                     self.check_states(
@@ -421,142 +474,153 @@ class KeylayoutParser(object):
                 print(error_msg_winmac_mismatch.format(
                     win_sc_int, win_keycodes[win_sc_hex], mac_kc))
                 continue
-            
-            self.append_to_key_table(kt_output, mac_kc, win_sc_hex, win_vk_name)
+
+            self.append_to_key_table(
+                kt_output, mac_kc, win_sc_hex, win_vk_name)
 
         return kt_output
 
     def _append_to_key_table_all_shift_states(
             self, kt_output: list, mac_kc: int, win_sc_hex: str, win_vk_name: str):
-            # The key_table follows the syntax of the .klc file.
-            # The columns are as follows:
+        # The key_table follows the syntax of the .klc file.
+        # The columns are as follows:
 
-            # key_table[0]: scan code
-            # key_table[1]: virtual key
-            # key_table[2]: spacer (empty)
-            # key_table[3]: caps (on or off, or SGCaps flag)
-            # key_table[4]: output for default state
-            # key_table[5]: output for shift
-            # key_table[6]: output for ctrl (= cmd on mac)
-            # key_table[7]: output for ctrl-shift (= cmd-caps lock on mac)
-            # key_table[8]: output for altGr (= ctrl-alt)
-            # key_table[9]: output for altGr-shift (= ctrl-alt-shift)
-            # key_table[10]: descriptions.
+        # key_table[0]: scan code
+        # key_table[1]: virtual-key
+        # key_table[2]: spacer (empty)
+        # key_table[3]: caps (on or off, or SGCaps flag)
+        # key_table[4]: output for default state
+        # key_table[5]: output for shift
+        # key_table[6]: output for ctrl (= cmd on mac)
+        # key_table[7]: output for ctrl-shift (= cmd-caps lock on mac)
+        # key_table[8]: output for altGr (= ctrl-alt)
+        # key_table[9]: output for altGr-shift (= ctrl-alt-shift)
+        # key_table[10]: descriptions.
 
-            outputs = self.output_dict[mac_kc]
+        outputs = self.output_dict[mac_kc]
 
-            key_table = list((win_sc_hex, win_vk_name)) + ([""] * 9)
-            default_output = self.get_key_output(outputs, 'default')
-            shift_output = self.get_key_output(outputs, 'shift')
-            alt_output = self.get_key_output(outputs, 'alt')
-            altshift_output = self.get_key_output(outputs, 'altshift')
-            caps_output = self.get_key_output(outputs, 'caps')
-            cmd_output = self.get_key_output(outputs, 'cmd')
-            cmdcaps_output = self.get_key_output(outputs, 'cmdcaps')
-            shiftcaps_output = self.get_key_output(outputs, 'shiftcaps')
+        default_output = self.get_key_output(outputs, 'default')
+        shift_output = self.get_key_output(outputs, 'shift')
+        alt_output = self.get_key_output(outputs, 'alt')
+        altshift_output = self.get_key_output(outputs, 'altshift')
+        caps_output = self.get_key_output(outputs, 'caps')
+        cmd_output = self.get_key_output(outputs, 'cmd')
+        cmdcaps_output = self.get_key_output(outputs, 'cmdcaps')
+        shiftcaps_output = self.get_key_output(outputs, 'shiftcaps')
 
-            # Check if the caps lock output equals the shift key,
-            # to set the caps lock status.
-            if caps_output == default_output:
-                key_table[3] = '0'
-            elif caps_output == shift_output:
-                key_table[3] = '1'
-            else:
-                # SGCaps are a Windows specialty, necessary if the caps lock
-                # state is different from shift.
-                # Usually, they accommodate an alternate writing system.
-                # SGCaps + Shift is possible, boosting the available
-                # shift states to 6.
-                key_table[3] = 'SGCap'
-                print('Info: SGCap character converted: '
-                      'default: {}, shift: {}, caps: {}'.format(
-                          char_description(default_output),
-                          char_description(shift_output),
-                          char_description(caps_output)))
+        key_table = [None] * 11
+        key_table[0] = win_sc_hex
+        key_table[1] = (_fix_vk_and_log(win_vk_name, default_output, shift_output)
+                        if self.fix_vk else win_vk_name)
+        key_table[2] = ''
 
-            key_table[4] = default_output
-            key_table[5] = shift_output
-            key_table[6] = cmd_output
-            key_table[7] = cmdcaps_output
-            key_table[8] = alt_output
-            key_table[9] = altshift_output
-            key_table[10] = (
-                f'// {char_description(default_output)}, '
-                f'{char_description(shift_output)}, '
-                f'{char_description(cmd_output)}, '
-                f'{char_description(cmdcaps_output)}, '
-                f'{char_description(alt_output)}, '
-                f'{char_description(altshift_output)}')  # key descriptions
+        # Check if the caps lock output equals the shift key,
+        # to set the caps lock status.
+        if caps_output == default_output:
+            key_table[3] = '0'
+        elif caps_output == shift_output:
+            key_table[3] = '1'
+        else:
+            # SGCaps are a Windows specialty, necessary if the caps lock
+            # state is different from shift.
+            # Usually, they accommodate an alternate writing system.
+            # SGCaps + Shift is possible, boosting the available
+            # shift states to 6.
+            key_table[3] = 'SGCap'
+            print('Info: SGCap character converted: '
+                  'default: {}, shift: {}, caps: {}'.format(
+                      char_description(default_output),
+                      char_description(shift_output),
+                      char_description(caps_output)))
 
-            kt_output.append('\t'.join(key_table))
+        key_table[4] = default_output
+        key_table[5] = shift_output
+        key_table[6] = cmd_output
+        key_table[7] = cmdcaps_output
+        key_table[8] = alt_output
+        key_table[9] = altshift_output
+        key_table[10] = (
+            f'// {char_description(default_output)}, '
+            f'{char_description(shift_output)}, '
+            f'{char_description(cmd_output)}, '
+            f'{char_description(cmdcaps_output)}, '
+            f'{char_description(alt_output)}, '
+            f'{char_description(altshift_output)}')  # key descriptions
 
-            if key_table[3] == 'SGCap':
-                kt_output.append(
-                    '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '', '', '',
-                               f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
-                )
+        kt_output.append('\t'.join(key_table))
+
+        if key_table[3] == 'SGCap':
+            kt_output.append(
+                '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '', '', '',
+                           f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
+            )
 
     def _append_to_key_table_common_shift_states(
             self, kt_output: list, mac_kc: int, win_sc_hex: str, win_vk_name: str):
-            # The key_table follows the syntax of the .klc file.
-            # The columns are as follows:
+        # The key_table follows the syntax of the .klc file.
+        # The columns are as follows:
 
-            # key_table[0]: scan code
-            # key_table[1]: virtual key
-            # key_table[2]: spacer (empty)
-            # key_table[3]: caps (on or off, or SGCaps flag)
-            # key_table[4]: output for default state
-            # key_table[5]: output for shift
-            # key_table[6]: output for altGr (= ctrl-alt)
-            # key_table[7]: output for altGr-shift (= ctrl-alt-shift)
-            # key_table[8]: descriptions.
+        # key_table[0]: scan code
+        # key_table[1]: virtual-key
+        # key_table[2]: spacer (empty)
+        # key_table[3]: caps (on or off, or SGCaps flag)
+        # key_table[4]: output for default state
+        # key_table[5]: output for shift
+        # key_table[6]: output for altGr (= ctrl-alt)
+        # key_table[7]: output for altGr-shift (= ctrl-alt-shift)
+        # key_table[8]: descriptions.
 
-            outputs = self.output_dict[mac_kc]
+        outputs = self.output_dict[mac_kc]
 
-            key_table = list((win_sc_hex, win_vk_name)) + ([""] * 7)
-            default_output = self.get_key_output(outputs, 'default')
-            shift_output = self.get_key_output(outputs, 'shift')
-            alt_output = self.get_key_output(outputs, 'alt')
-            altshift_output = self.get_key_output(outputs, 'altshift')
-            caps_output = self.get_key_output(outputs, 'caps')
-            shiftcaps_output = self.get_key_output(outputs, 'shiftcaps')
+        default_output = self.get_key_output(outputs, 'default')
+        shift_output = self.get_key_output(outputs, 'shift')
+        alt_output = self.get_key_output(outputs, 'alt')
+        altshift_output = self.get_key_output(outputs, 'altshift')
+        caps_output = self.get_key_output(outputs, 'caps')
+        shiftcaps_output = self.get_key_output(outputs, 'shiftcaps')
 
-            # Check if the caps lock output equals the shift key,
-            # to set the caps lock status.
-            if caps_output == default_output:
-                key_table[3] = '0'
-            elif caps_output == shift_output:
-                key_table[3] = '1'
-            else:
-                # SGCaps are a Windows specialty, necessary if the caps lock
-                # state is different from shift.
-                # Usually, they accommodate an alternate writing system.
-                # SGCaps + Shift is possible, boosting the available
-                # shift states to 6.
-                key_table[3] = 'SGCap'
-                print('Info: SGCap character converted: '
-                      'default: {}, shift: {}, caps: {}'.format(
-                          char_description(default_output),
-                          char_description(shift_output),
-                          char_description(caps_output)))
+        key_table = [None] * 9
+        key_table[0] = win_sc_hex
+        key_table[1] = (_fix_vk_and_log(win_vk_name, default_output, shift_output)
+                        if self.fix_vk else win_vk_name)
+        key_table[2] = ''
 
-            key_table[4] = default_output
-            key_table[5] = shift_output
-            key_table[6] = alt_output
-            key_table[7] = altshift_output
-            key_table[8] = (
-                f'// {char_description(default_output)}, '
-                f'{char_description(shift_output)}, '
-                f'{char_description(alt_output)}, '
-                f'{char_description(altshift_output)}')  # key descriptions
+        # Check if the caps lock output equals the shift key,
+        # to set the caps lock status.
+        if caps_output == default_output:
+            key_table[3] = '0'
+        elif caps_output == shift_output:
+            key_table[3] = '1'
+        else:
+            # SGCaps are a Windows specialty, necessary if the caps lock
+            # state is different from shift.
+            # Usually, they accommodate an alternate writing system.
+            # SGCaps + Shift is possible, boosting the available
+            # shift states to 6.
+            key_table[3] = 'SGCap'
+            print('Info: SGCap character converted: '
+                  'default: {}, shift: {}, caps: {}'.format(
+                      char_description(default_output),
+                      char_description(shift_output),
+                      char_description(caps_output)))
 
-            kt_output.append('\t'.join(key_table))
+        key_table[4] = default_output
+        key_table[5] = shift_output
+        key_table[6] = alt_output
+        key_table[7] = altshift_output
+        key_table[8] = (
+            f'// {char_description(default_output)}, '
+            f'{char_description(shift_output)}, '
+            f'{char_description(alt_output)}, '
+            f'{char_description(altshift_output)}')  # key descriptions
 
-            if key_table[3] == 'SGCap':
-                kt_output.append(
-                    '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '',
-                               f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
-                )
+        kt_output.append('\t'.join(key_table))
+
+        if key_table[3] == 'SGCap':
+            kt_output.append(
+                '\t'.join(['-1', '-1', '', '0', caps_output, shiftcaps_output, '', '',
+                           f'// {char_description(caps_output)}, {char_description(shiftcaps_output)}'])
+            )
 
     def get_deadkey_table(self):
         '''
@@ -755,10 +819,11 @@ def make_klc_filename(keyboard_name):
     return filename
 
 
-def process_input_keylayout(input_keylayout, physical_layout, shift_states):
+def process_input_keylayout(input_keylayout, physical_layout, shift_states, fix_vk):
     filtered_xml = filter_xml(input_keylayout)
     tree = ET.XML(filtered_xml)
-    keyboard_data = KeylayoutParser(tree, physical_layout, shift_states)
+    keyboard_data = KeylayoutParser(
+        tree, physical_layout, shift_states, fix_vk)
     return keyboard_data
 
 
@@ -795,16 +860,17 @@ def make_klc_prologue(klc_attributes: KlcAttributes, shift_states: str):
         prologue = klc_prologue_dummy_common_shift_states
     else:
         assert False
-    
+
     return prologue.format(
-            klc_attributes.keyboard_name,
-            klc_attributes.keyboard_description,
-            year,
-            klc_attributes.company_name,
-            klc_attributes.company_name,
-            klc_attributes.language_tag,
-            klc_attributes.language_id)
-    
+        klc_attributes.keyboard_name,
+        klc_attributes.keyboard_description,
+        year,
+        klc_attributes.company_name,
+        klc_attributes.company_name,
+        klc_attributes.language_tag,
+        klc_attributes.language_id)
+
+
 def make_klc_epilogue(klc_attributes: KlcAttributes):
 
     return klc_epilogue_dummy.format(
@@ -906,6 +972,13 @@ def get_args(args=None):
         default='all',
     )
 
+    parser.add_argument(
+        '--fix_virtual_keys',
+        action='store_true',
+        help='(Beta feature) Tries to generate virtual-key codes according to the label of the key. '
+        'This helps with supporting shortcuts correctly on some non-English keyboard layouts.',
+    )
+
     return parser.parse_args(args)
 
 
@@ -917,7 +990,8 @@ def run(args):
     else:
         output_dir = os.path.abspath(os.path.dirname(input_file))
 
-    keyboard_data = process_input_keylayout(input_file, args.physical_layout, args.shift_states)
+    keyboard_data = process_input_keylayout(
+        input_file, args.physical_layout, args.shift_states, args.fix_virtual_keys)
     keyboard_name = make_keyboard_name(input_file)
     klc_filename = make_klc_filename(keyboard_name)
     klc_attributes = KlcAttributes(company_name=args.company_name,
